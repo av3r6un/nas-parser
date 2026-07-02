@@ -18,23 +18,20 @@ build/
 dist/
 *.egg-info/
 
+# Local input/reference data
+input/*
+!input/.gitkeep
+reference/*
+!reference/.gitkeep
+
 # Local runtime output
-logs/
-output/
+logs/*
+!logs/.gitkeep
+output/*
+!output/.gitkeep
 
 # Editor and OS files
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
-
-
-logs/*.log
-output/*.xlsx
-tests/
-
-# uv req
-pyproject.toml
-.python-version
-uv.lock
-
