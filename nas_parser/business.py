@@ -74,25 +74,21 @@ class ProductEnricher:
     def _build_name(self, record: ProductRecord) -> None:
         """Build a display name from the enriched product fields when possible."""
         if record.fixation == "sew":
-            if not record.color or not record.shape or not record.size:
+            if not record.color or not record.shape:
                 record.name = None
                 return
 
             record.name = (
-                f"Пришивные стразы {self._format_color_for_name(record.color)} "
-                f"{record.shape} {record.size}"
+                f"{self._format_color_for_name(record.color)} "
+                f"{self._format_shape_for_name(record.shape)}"
             )
             return
 
-        if not record.cut or not record.color or not record.size or not record.fixation:
+        if not record.color:
             record.name = None
             return
 
-        record.name = (
-            f"Стразы {self._format_cut_for_name(record.cut)} граней "
-            f"{self._format_color_for_name(record.color)} "
-            f"{record.size} {self._format_fixation_for_name(record.fixation)}"
-        )
+        record.name = self._format_color_for_name(record.color)
 
     def _build_category(self, record: ProductRecord) -> None:
         """Build the product category from fixation."""
@@ -134,6 +130,11 @@ class ProductEnricher:
     def _format_shape_for_sku(shape: str) -> str:
         """Convert a shape string into the display format used in SKUs."""
         return " ".join(ProductEnricher._format_sku_word(word) for word in shape.strip().split())
+
+    @staticmethod
+    def _format_shape_for_name(shape: str) -> str:
+        """Convert a shape string into the display format used in names."""
+        return " ".join(ProductEnricher._format_name_word(word) for word in shape.strip().split())
 
     @staticmethod
     def _format_size_for_sku(size: str) -> str:

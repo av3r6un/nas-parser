@@ -113,21 +113,17 @@ class TestProductEnricher(unittest.TestCase):
         self.assertEqual(len(enriched), 3)
         self.assertEqual(enriched[0].color_code, "001")
         self.assertEqual(enriched[0].sku, "12cut/Crystal/SS16/Hot/001")
-        self.assertEqual(
-            enriched[0].name, "Стразы 12 граней Crystal SS16 Hotfix"
-        )
+        self.assertEqual(enriched[0].name, "Crystal")
         self.assertEqual(enriched[0].category, "Стразы горячей фиксации")
 
         self.assertEqual(enriched[1].color_code, "001+")
         self.assertEqual(enriched[1].sku, "16cut/Crystal Ab/SS30/Non/001+")
-        self.assertEqual(
-            enriched[1].name, "Стразы 16 граней Crystal AB SS30 Non Hotfix"
-        )
+        self.assertEqual(enriched[1].name, "Crystal AB")
         self.assertEqual(enriched[1].category, "Стразы холодной фиксации")
 
         self.assertEqual(enriched[2].color_code, "112")
         self.assertEqual(enriched[2].sku, "16cut/New Ab/SS16/Hot/112")
-        self.assertEqual(enriched[2].name, "Стразы 16 граней New AB SS16 Hotfix")
+        self.assertEqual(enriched[2].name, "New AB")
         self.assertEqual(enriched[2].category, "Стразы горячей фиксации")
         self.assertIn("warnings=0", report.summary())
         self.assertIn("errors=0", report.summary())
