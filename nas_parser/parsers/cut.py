@@ -49,12 +49,15 @@ class CutParser(ParserBase):
             price_value = self._decimal_value(self._get_value(row.values, 3), row.values)
             quantity_value = self._decimal_value(self._get_value(row.values, 6), row.values)
             row_color_value = self._string_value(self._get_value(row.values, 0))
-            row_color_code = self._string_value(self._get_value(row.values, 7))
+            row_article, row_color_code = self._resolve_article_and_color_code(
+                row.values,
+                size_value,
+            )
 
             if row_color_value is not None:
                 current_color = row_color_value
-                if row_color_code is not None:
-                    current_color_code = row_color_code
+            if row_color_code is not None:
+                current_color_code = row_color_code
 
             if current_color is None or size_value is None:
                 continue
@@ -70,6 +73,7 @@ class CutParser(ParserBase):
                 shape=None,
                 fixation=current_fixation,
                 cut=current_cut,
+                sku=row_article,
                 source_file=row.source_file,
                 source_sheet=row.source_sheet,
                 source_row=row.source_row,
@@ -110,6 +114,31 @@ class CutParser(ParserBase):
             return None
 
         return values[index]
+
+    @staticmethod
+    def _resolve_article_and_color_code(
+        values: tuple[object, ...],
+        size: str | None,
+    ) -> tuple[str | None, str | None]:
+        """Return the article and color code from the cut-specific tail columns."""
+        if CutParser._is_mix_size(size):
+            return (
+                CutParser._string_value(CutParser._get_value(values, 8)),
+                CutParser._string_value(CutParser._get_value(values, 7)),
+            )
+
+        if len(values) <= 8:
+            return None, CutParser._string_value(CutParser._get_value(values, 7))
+
+        article = CutParser._string_value(CutParser._get_value(values, 7))
+        color_code = CutParser._string_value(CutParser._get_value(values, 8))
+
+        return article, color_code
+
+    @staticmethod
+    def _is_mix_size(size: str | None) -> bool:
+        """Return whether a cut size uses the mix-specific tail column order."""
+        return size is not None and size.strip().casefold() == "mix"
 
     @staticmethod
     def _string_value(value: object | None) -> str | None:

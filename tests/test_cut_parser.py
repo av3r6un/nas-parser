@@ -188,6 +188,99 @@ class TestCutParser(unittest.TestCase):
             source_row=4,
         )
 
+    def test_parse_reads_article_and_color_code_from_new_columns(self) -> None:
+        """Verify regular and mix rows resolve article and color code columns."""
+        parser = CutParser()
+        source_file = Path("input/12cut_non.xlsx")
+        rows = [
+            make_source_row(
+                source_file,
+                "12cut_non",
+                1,
+                ("title", None, None, None, None, None, None, None, None),
+            ),
+            make_source_row(
+                source_file,
+                "12cut_non",
+                2,
+                (
+                    "color",
+                    "size",
+                    "pack_size",
+                    "price",
+                    "received",
+                    "sold",
+                    "stock",
+                    "article",
+                    "color_code",
+                ),
+            ),
+            make_source_row(
+                source_file,
+                "12cut_non",
+                3,
+                (
+                    "Crystal",
+                    "SS16",
+                    1440,
+                    135,
+                    516,
+                    142,
+                    374,
+                    "12cut/Crystal/SS16/Non/001",
+                    "001",
+                ),
+            ),
+            make_source_row(
+                source_file,
+                "12cut_non",
+                4,
+                (
+                    None,
+                    "mix",
+                    1440,
+                    222,
+                    600,
+                    63,
+                    537,
+                    "MIX001",
+                    "12cut/Crystal/mix/Non/MIX001",
+                ),
+            ),
+        ]
+
+        records = list(parser.parse(rows))
+
+        self.assertEqual(len(records), 2)
+        self._assert_product_record(
+            records[0],
+            price=Decimal("135"),
+            quantity=Decimal("374"),
+            color="Crystal",
+            color_code="001",
+            size="SS16",
+            cut="12cut",
+            fixation="non",
+            source_file=source_file,
+            source_sheet="12cut_non",
+            source_row=3,
+            sku="12cut/Crystal/SS16/Non/001",
+        )
+        self._assert_product_record(
+            records[1],
+            price=Decimal("222"),
+            quantity=Decimal("537"),
+            color="Crystal",
+            color_code="MIX001",
+            size="mix",
+            cut="12cut",
+            fixation="non",
+            source_file=source_file,
+            source_sheet="12cut_non",
+            source_row=4,
+            sku="12cut/Crystal/mix/Non/MIX001",
+        )
+
     def _assert_product_record(
         self,
         record: ProductRecord,
@@ -202,6 +295,7 @@ class TestCutParser(unittest.TestCase):
         source_file: Path,
         source_sheet: str,
         source_row: int,
+        sku: str | None = None,
     ) -> None:
         """Assert the common fields of a parsed product record."""
         self.assertEqual(record.price, price)
@@ -215,7 +309,7 @@ class TestCutParser(unittest.TestCase):
         self.assertEqual(record.source_sheet, source_sheet)
         self.assertEqual(record.source_row, source_row)
         self.assertEqual(record.parser_name, "cut")
-        self.assertIsNone(record.sku)
+        self.assertEqual(record.sku, sku)
         self.assertIsNone(record.name)
         self.assertIsNone(record.category)
         self.assertIsNone(record.shape)

@@ -201,3 +201,91 @@ class TestExcelExporter(unittest.TestCase):
                 workbook.close()
 
         self.assertEqual([row[0] for row in rows[1:]], ["sku-1", "sku-2", "sku-3"])
+
+    def test_export_rounds_prices_up_to_whole_rubles(self) -> None:
+        """Verify that exported prices are always rounded upward to whole rubles."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_file = Path(temp_dir) / "prices.xlsx"
+            records = [
+                make_record(
+                    sku="sku-1800001",
+                    name="Price 18.00001",
+                    price=Decimal("18.00001"),
+                    quantity=Decimal("1"),
+                    category="A",
+                    color="A",
+                    size="1",
+                ),
+                make_record(
+                    sku="sku-185",
+                    name="Price 18.5",
+                    price=Decimal("18.5"),
+                    quantity=Decimal("1"),
+                    category="A",
+                    color="B",
+                    size="1",
+                ),
+                make_record(
+                    sku="sku-18999",
+                    name="Price 18.999",
+                    price=Decimal("18.999"),
+                    quantity=Decimal("1"),
+                    category="A",
+                    color="C",
+                    size="1",
+                ),
+                make_record(
+                    sku="sku-19",
+                    name="Price 19",
+                    price=Decimal("19"),
+                    quantity=Decimal("1"),
+                    category="A",
+                    color="D",
+                    size="1",
+                ),
+                make_record(
+                    sku="sku-0",
+                    name="Price 0",
+                    price=Decimal("0"),
+                    quantity=Decimal("1"),
+                    category="A",
+                    color="E",
+                    size="1",
+                ),
+                make_record(
+                    sku="sku-01",
+                    name="Price 0.1",
+                    price=Decimal("0.1"),
+                    quantity=Decimal("1"),
+                    category="A",
+                    color="F",
+                    size="1",
+                ),
+                make_record(
+                    sku="sku-none",
+                    name="Price None",
+                    price=None,
+                    quantity=Decimal("1"),
+                    category="A",
+                    color="G",
+                    size="1",
+                ),
+            ]
+
+            ExcelExporter(output_file).export(records)
+
+            workbook = load_workbook(output_file, read_only=True, data_only=True)
+            try:
+                rows = list(workbook[workbook.sheetnames[0]].iter_rows(values_only=True))
+            finally:
+                workbook.close()
+
+        exported_prices = {row[0]: row[2] for row in rows[1:]}
+        self.assertEqual(exported_prices["sku-1800001"], 19)
+        self.assertEqual(exported_prices["sku-185"], 19)
+        self.assertEqual(exported_prices["sku-18999"], 19)
+        self.assertEqual(exported_prices["sku-19"], 19)
+        self.assertEqual(exported_prices["sku-0"], 0)
+        self.assertEqual(exported_prices["sku-01"], 1)
+        self.assertIsNone(exported_prices["sku-none"])
+        self.assertEqual(records[0].price, Decimal("18.00001"))

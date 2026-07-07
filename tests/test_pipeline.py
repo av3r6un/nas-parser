@@ -131,10 +131,10 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(records[4].parser_name, "k9")
         self.assertEqual(records[4].color, "CRYSTAL")
         self.assertEqual(records[4].shape, "Drop")
-        self.assertEqual(records[4].size, "7*12")
+        self.assertEqual(records[4].size, "7x12")
         self.assertEqual(records[4].fixation, "sew")
         self.assertIsNone(records[4].cut)
-        self.assertEqual(records[4].sku, "Crystal/Drop/7x12")
+        self.assertEqual(records[4].sku, "K9/Crystal/Drop/7x12/001")
         self.assertEqual(records[4].name, "Crystal Drop")
         self.assertEqual(records[4].category, "Пришивные стразы")
         self.assertEqual(records[4].color_code, "001")
@@ -145,3 +145,163 @@ class TestPipeline(unittest.TestCase):
         self.assertIn("warnings=0", report.summary())
         self.assertIn("errors=0", report.summary())
         self.assertIn(f"output_file={output_file}", report.summary())
+
+    def test_pipeline_generates_reference_file_for_missing_color(self) -> None:
+        """Verify missing K9 colors are generated and written to a new reference file."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_dir = Path(temp_dir) / "input"
+            reference_dir = Path(temp_dir) / "reference"
+            output_dir = Path(temp_dir) / "output"
+            output_file = output_dir / "catalog.xlsx"
+            logs_dir = Path(temp_dir) / "logs"
+            input_dir.mkdir()
+            reference_dir.mkdir()
+            output_dir.mkdir()
+
+            base_reference = reference_dir / "colorcode-articul.xlsx"
+            _write_color_reference_workbook(base_reference)
+            base_bytes = base_reference.read_bytes()
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "K9"
+            sheet.append(("K9 title", None, None, None, None, None, None, None))
+            sheet.append(("color", "shape", "size", "price", "pack", "received", "sold", "stock"))
+            sheet.append(("AURORA GREEN", "Navette", "7*15", 11, 72, 1886, None, 1886))
+            workbook.save(input_dir / "K9.xlsx")
+            workbook.close()
+
+            pipeline = Pipeline(
+                AppConfig(
+                    input_dir=input_dir,
+                    reference_dir=reference_dir,
+                    output_dir=output_dir,
+                    output_file=output_file,
+                    logs_dir=logs_dir,
+                )
+            )
+            records, report = pipeline.run()
+
+            generated_file = reference_dir / "generated" / "colorcode-articul_gen1.xlsx"
+            generated_workbook = load_workbook(generated_file, read_only=True, data_only=True)
+            try:
+                rows = list(generated_workbook.active.iter_rows(values_only=True))
+            finally:
+                generated_workbook.close()
+            generated_exists = generated_file.is_file()
+            base_after_bytes = base_reference.read_bytes()
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].color_code, "203")
+        self.assertEqual(records[0].sku, "K9/Aurora Green/Navette/7x15/203")
+        self.assertTrue(generated_exists)
+        self.assertEqual(base_after_bytes, base_bytes)
+        self.assertIn(("K9/Aurora Green/Navette/7x15/203", "K9", "Aurora Green", "7x15", "K9", "203"), rows)
+        self.assertIn("Reference updates:", report.logs())
+        self.assertIn("Generated colors: 1", report.logs())
+        self.assertIn(f"Generated reference: {generated_file}", report.logs())
+        self.assertIn("warnings=0", report.summary())
+
+    def test_pipeline_uses_latest_generated_reference_file(self) -> None:
+        """Verify the active color reference comes from the latest generation file."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_dir = Path(temp_dir) / "input"
+            reference_dir = Path(temp_dir) / "reference"
+            generated_dir = reference_dir / "generated"
+            output_dir = Path(temp_dir) / "output"
+            output_file = output_dir / "catalog.xlsx"
+            logs_dir = Path(temp_dir) / "logs"
+            input_dir.mkdir()
+            reference_dir.mkdir()
+            generated_dir.mkdir()
+            output_dir.mkdir()
+
+            _write_color_reference_workbook(reference_dir / "colorcode-articul.xlsx")
+            gen5 = generated_dir / "colorcode-articul_gen5.xlsx"
+            _write_color_reference_workbook(gen5)
+            workbook = load_workbook(gen5)
+            try:
+                workbook.active.append(("K9/Crystal/Drop/7x12/777", "K9", "Crystal", "7x12", "K9", "777"))
+                workbook.save(gen5)
+            finally:
+                workbook.close()
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "K9"
+            sheet.append(("K9 title", None, None, None, None, None, None, None))
+            sheet.append(("color", "shape", "size", "price", "pack", "received", "sold", "stock"))
+            sheet.append(("Crystal", "Drop", "7*12", 11, 72, 1886, None, 1886))
+            workbook.save(input_dir / "K9.xlsx")
+            workbook.close()
+
+            pipeline = Pipeline(
+                AppConfig(
+                    input_dir=input_dir,
+                    reference_dir=reference_dir,
+                    output_dir=output_dir,
+                    output_file=output_file,
+                    logs_dir=logs_dir,
+                )
+            )
+            records, report = pipeline.run()
+
+        self.assertEqual(records[0].color_code, "777")
+        self.assertEqual(records[0].sku, "K9/Crystal/Drop/7x12/777")
+        self.assertFalse((generated_dir / "colorcode-articul_gen6.xlsx").exists())
+        self.assertIn("Reference updates:", report.logs())
+        self.assertIn("No changes", report.logs())
+
+    def test_pipeline_repeated_run_does_not_create_new_generation(self) -> None:
+        """Verify repeated runs on identical input do not create new reference generations."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_dir = Path(temp_dir) / "input"
+            reference_dir = Path(temp_dir) / "reference"
+            generated_dir = reference_dir / "generated"
+            output_dir = Path(temp_dir) / "output"
+            output_file = output_dir / "catalog.xlsx"
+            logs_dir = Path(temp_dir) / "logs"
+            input_dir.mkdir()
+            reference_dir.mkdir()
+            output_dir.mkdir()
+
+            _write_color_reference_workbook(reference_dir / "colorcode-articul.xlsx")
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "K9"
+            sheet.append(("K9 title", None, None, None, None, None, None, None))
+            sheet.append(("color", "shape", "size", "price", "pack", "received", "sold", "stock"))
+            sheet.append(("AURORA GREEN", "Navette", "7*15", 11, 72, 1886, None, 1886))
+            workbook.save(input_dir / "K9.xlsx")
+            workbook.close()
+
+            pipeline = Pipeline(
+                AppConfig(
+                    input_dir=input_dir,
+                    reference_dir=reference_dir,
+                    output_dir=output_dir,
+                    output_file=output_file,
+                    logs_dir=logs_dir,
+                )
+            )
+            first_records, first_report = pipeline.run()
+            second_records, second_report = pipeline.run()
+
+            gen1 = generated_dir / "colorcode-articul_gen1.xlsx"
+            gen2 = generated_dir / "colorcode-articul_gen2.xlsx"
+            gen1_exists = gen1.is_file()
+            gen2_exists = gen2.exists()
+            workbook = load_workbook(gen1, read_only=True, data_only=True)
+            try:
+                rows = list(workbook.active.iter_rows(values_only=True))
+            finally:
+                workbook.close()
+
+        self.assertEqual(first_records[0].color_code, "203")
+        self.assertEqual(second_records[0].color_code, "203")
+        self.assertTrue(gen1_exists)
+        self.assertFalse(gen2_exists)
+        self.assertEqual(len([row for row in rows if row[2] == "Aurora Green"]), 1)
+        self.assertIn("Generated colors: 1", first_report.logs())
+        self.assertIn("No changes", second_report.logs())

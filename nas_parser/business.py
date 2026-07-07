@@ -6,15 +6,21 @@ from collections.abc import Iterable
 
 from nas_parser.domain import ProductRecord
 from nas_parser.references.colors import ColorReference
+from nas_parser.references.manager import ColorReferenceManager
 from nas_parser.report import RunReport
 
 
 class ProductEnricher:
     """Enrich ProductRecord objects with business fields."""
 
-    def __init__(self, color_reference: ColorReference) -> None:
+    def __init__(
+        self,
+        color_reference: ColorReference,
+        color_reference_manager: ColorReferenceManager | None = None,
+    ) -> None:
         """Initialize the enricher with a color reference."""
         self._color_reference = color_reference
+        self._color_reference_manager = color_reference_manager
 
     def enrich(
         self, records: Iterable[ProductRecord], report: RunReport
@@ -33,22 +39,47 @@ class ProductEnricher:
 
     def _apply_color_code(self, record: ProductRecord) -> None:
         """Fill color_code from the color reference when possible."""
+        if not self._has_text(record.color):
+            return
+
         reference_code = self._color_reference.get_code(record.color)
         if reference_code is not None:
             record.color_code = reference_code
+            return
+
+        if self._has_text(record.color_code):
+            return
+
+        if self._color_reference_manager is None:
+            return
+
+        if not self._has_text(record.fixation):
+            return
+
+        record.color_code = self._color_reference_manager.ensure_color(
+            color=self._format_color_for_name(record.color),
+            cut=record.shape if record.fixation == "sew" else record.cut,
+            size=record.size,
+            fixation=record.fixation,
+        )
 
     def _build_sku(self, record: ProductRecord) -> None:
         """Build SKU from the enriched product fields when possible."""
+        if self._has_text(record.sku):
+            return
+
         if record.fixation == "sew":
-            if not record.color or not record.shape or not record.size:
+            if not record.color or not record.shape or not record.size or not record.color_code:
                 record.sku = None
                 return
 
             record.sku = "/".join(
                 (
-                    self._format_color_for_sku(record.color),
+                    "K9",
+                    self._format_color_for_name(record.color),
                     self._format_shape_for_sku(record.shape),
                     self._format_size_for_sku(record.size),
+                    record.color_code,
                 )
             )
             return

@@ -40,6 +40,31 @@ class TestRunReport(unittest.TestCase):
         self.assertIn("ERRORS (0):", lines)
         self.assertEqual(lines.count("  - none"), 3)
 
+    def test_logs_include_reference_updates_without_changes(self) -> None:
+        """Verify reference update logs include the no-changes state."""
+        report = RunReport()
+
+        report.set_reference_update(generated_colors=0)
+        lines = report.logs().splitlines()
+
+        self.assertIn("Reference updates:", lines)
+        self.assertIn("  No changes", lines)
+
+    def test_logs_include_generated_reference_update(self) -> None:
+        """Verify reference update logs include generated file details."""
+        report = RunReport()
+        generated_reference = Path("reference/generated/colorcode-articul_gen1.xlsx")
+
+        report.set_reference_update(
+            generated_colors=2,
+            generated_reference=generated_reference,
+        )
+        lines = report.logs().splitlines()
+
+        self.assertIn("Reference updates:", lines)
+        self.assertIn("  Generated colors: 2", lines)
+        self.assertIn(f"  Generated reference: {generated_reference}", lines)
+
     def test_write_logs_creates_named_log_files(self) -> None:
         """Verify that report messages are written into separate files."""
         report = RunReport()

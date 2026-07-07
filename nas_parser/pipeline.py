@@ -11,6 +11,7 @@ from nas_parser.export import ExcelExporter
 from nas_parser.parsers import CutParser, K9Parser, ParserRegistry
 from nas_parser.readers import ExcelReader
 from nas_parser.references.colors import ColorReference, ColorReferenceLoader
+from nas_parser.references.manager import ColorReferenceManager
 from nas_parser.report import RunReport
 from nas_parser.validation import ProductValidator
 
@@ -28,8 +29,9 @@ class Pipeline:
         report = RunReport()
         report.info("Pipeline started.")
 
-        color_reference = self._load_color_reference()
-        enricher = ProductEnricher(color_reference)
+        color_reference_manager = ColorReferenceManager(self._config.reference_dir)
+        color_reference = self._load_color_reference(color_reference_manager)
+        enricher = ProductEnricher(color_reference, color_reference_manager)
         validator = ProductValidator()
         records: list[ProductRecord] = []
         input_files = self._collect_input_files()
@@ -70,17 +72,36 @@ class Pipeline:
         self._config.output_file.parent.mkdir(parents=True, exist_ok=True)
         output_file = ExcelExporter(self._config.output_file).export(records)
         report.set_output_file(output_file)
+        self._update_color_reference(color_reference_manager, report)
         report.info("Pipeline finished.")
         report.write_logs(self._config.logs_dir)
         return records, report
 
-    def _load_color_reference(self) -> ColorReference:
+    def _load_color_reference(self, manager: ColorReferenceManager) -> ColorReference:
         """Load the color reference workbook when it exists."""
-        reference_file = self._config.reference_dir / "colorcode-articul.xlsx"
+        reference_file = manager.get_active_reference_file()
         if reference_file.is_file():
             return ColorReferenceLoader(reference_file).load()
 
         return ColorReference(source_file=reference_file)
+
+    def _update_color_reference(
+        self,
+        manager: ColorReferenceManager,
+        report: RunReport,
+    ) -> None:
+        """Write a generated color reference file when new colors were created."""
+        generated_records = manager.generated_records()
+        if not generated_records:
+            report.set_reference_update(generated_colors=0)
+            return
+
+        generation_file = manager.copy_reference_for_generation()
+        manager.write_generated_records(generation_file)
+        report.set_reference_update(
+            generated_colors=len(generated_records),
+            generated_reference=generation_file,
+        )
 
     def _collect_input_files(self) -> list[Path]:
         """Return all Excel files from the configured input directory."""

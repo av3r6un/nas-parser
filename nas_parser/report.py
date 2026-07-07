@@ -24,6 +24,9 @@ class RunReport:
         self._records_16cut = 0
         self._records_k9 = 0
         self._output_file: Path | None = None
+        self._reference_update_recorded = False
+        self._generated_colors = 0
+        self._generated_reference: Path | None = None
 
     def info(self, message: str) -> None:
         """Record an informational message."""
@@ -40,6 +43,17 @@ class RunReport:
     def set_output_file(self, path: Path) -> None:
         """Store the generated output file path for summary output."""
         self._output_file = path
+
+    def set_reference_update(
+        self,
+        *,
+        generated_colors: int,
+        generated_reference: Path | None = None,
+    ) -> None:
+        """Store generated color reference update details."""
+        self._reference_update_recorded = True
+        self._generated_colors = generated_colors
+        self._generated_reference = generated_reference
 
     def set_record_statistics(self, records: Iterable[ProductRecord]) -> None:
         """Store product type statistics based on existing records."""
@@ -91,6 +105,7 @@ class RunReport:
     def logs(self) -> str:
         """Return a line-by-line run log with summary and collected messages."""
         lines = [self.summary()]
+        lines.extend(self._reference_update_section())
         lines.extend(self._message_section("INFO", self._info_messages))
         lines.extend(self._message_section("WARNINGS", self._warning_messages))
         lines.extend(self._message_section("ERRORS", self._error_messages))
@@ -112,6 +127,21 @@ class RunReport:
             return lines
 
         lines.extend(f"  - {message}" for message in messages)
+        return lines
+
+    def _reference_update_section(self) -> list[str]:
+        """Format generated reference update details."""
+        if not self._reference_update_recorded:
+            return []
+
+        lines = ["Reference updates:"]
+        if self._generated_colors == 0:
+            lines.append("  No changes")
+            return lines
+
+        lines.append(f"  Generated colors: {self._generated_colors}")
+        if self._generated_reference is not None:
+            lines.append(f"  Generated reference: {self._generated_reference}")
         return lines
 
     @staticmethod

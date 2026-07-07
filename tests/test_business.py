@@ -12,6 +12,7 @@ from openpyxl import Workbook
 from nas_parser.business import ProductEnricher
 from nas_parser.domain import ProductRecord
 from nas_parser.references.colors import ColorReferenceLoader
+from nas_parser.references.manager import ColorReferenceManager
 from nas_parser.report import RunReport
 
 
@@ -41,6 +42,7 @@ def _make_record(
     source_row: int,
     color_code: str | None = None,
     shape: str | None = None,
+    sku: str | None = None,
     parser_name: str = "cut",
 ) -> ProductRecord:
     """Build a ProductRecord fixture for enrichment tests."""
@@ -57,6 +59,7 @@ def _make_record(
         fixation=fixation,
         color_code=color_code,
         shape=shape,
+        sku=sku,
     )
 
 
@@ -125,6 +128,102 @@ class TestProductEnricher(unittest.TestCase):
         self.assertEqual(enriched[2].sku, "16cut/New Ab/SS16/Hot/112")
         self.assertEqual(enriched[2].name, "New AB")
         self.assertEqual(enriched[2].category, "Стразы горячей фиксации")
+        self.assertIn("warnings=0", report.summary())
+        self.assertIn("errors=0", report.summary())
+
+    def test_enrich_keeps_existing_sku(self) -> None:
+        """Verify that an existing SKU from source data is not rebuilt."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            reference_file = Path(temp_dir) / "colorcode-articul.xlsx"
+            _write_color_reference_workbook(reference_file)
+
+            color_reference = ColorReferenceLoader(reference_file).load()
+            enricher = ProductEnricher(color_reference)
+            report = RunReport()
+            record = _make_record(
+                price=Decimal("135"),
+                quantity=Decimal("374"),
+                color="CRYSTAL",
+                size="SS16",
+                cut="12cut",
+                fixation="hot",
+                source_file=Path("input/12cut_hot.xlsx"),
+                source_sheet="12cut_hot",
+                source_row=3,
+                sku="source/article/kept",
+            )
+
+            enriched = enricher.enrich([record], report)
+
+        self.assertEqual(len(enriched), 1)
+        self.assertEqual(enriched[0].sku, "source/article/kept")
+        self.assertEqual(enriched[0].color_code, "001")
+        self.assertEqual(enriched[0].name, "Crystal")
+        self.assertIn("warnings=0", report.summary())
+        self.assertIn("errors=0", report.summary())
+
+    def test_enrich_builds_k9_sku_with_existing_color_code(self) -> None:
+        """Verify K9 SKU includes the K9 prefix and existing color code."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            reference_file = Path(temp_dir) / "colorcode-articul.xlsx"
+            _write_color_reference_workbook(reference_file)
+
+            color_reference = ColorReferenceLoader(reference_file).load()
+            enricher = ProductEnricher(color_reference)
+            report = RunReport()
+            record = _make_record(
+                price=Decimal("11"),
+                quantity=Decimal("1886"),
+                color="CRYSTAL",
+                size="7x12",
+                cut=None,
+                fixation="sew",
+                source_file=Path("input/K9.xlsx"),
+                source_sheet="K9",
+                source_row=3,
+                shape="Drop",
+                parser_name="k9",
+            )
+
+            enriched = enricher.enrich([record], report)
+
+        self.assertEqual(enriched[0].color_code, "001")
+        self.assertEqual(enriched[0].sku, "K9/Crystal/Drop/7x12/001")
+        self.assertIn("warnings=0", report.summary())
+        self.assertIn("errors=0", report.summary())
+
+    def test_enrich_generates_missing_color_code_with_manager(self) -> None:
+        """Verify missing colors are generated in memory and used immediately."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            reference_dir = Path(temp_dir)
+            reference_file = reference_dir / "colorcode-articul.xlsx"
+            _write_color_reference_workbook(reference_file)
+
+            color_reference = ColorReferenceLoader(reference_file).load()
+            color_reference_manager = ColorReferenceManager(reference_dir)
+            enricher = ProductEnricher(color_reference, color_reference_manager)
+            report = RunReport()
+            record = _make_record(
+                price=Decimal("11"),
+                quantity=Decimal("1886"),
+                color="AURORA GREEN",
+                size="7x15",
+                cut=None,
+                fixation="sew",
+                source_file=Path("input/K9.xlsx"),
+                source_sheet="K9",
+                source_row=3,
+                shape="Navette",
+                parser_name="k9",
+            )
+
+            enriched = enricher.enrich([record], report)
+            generated_records = color_reference_manager.generated_records()
+
+        self.assertEqual(enriched[0].color_code, "203")
+        self.assertEqual(enriched[0].sku, "K9/Aurora Green/Navette/7x15/203")
+        self.assertEqual(len(generated_records), 1)
+        self.assertEqual(generated_records[0].article, "K9/Aurora Green/Navette/7x15/203")
         self.assertIn("warnings=0", report.summary())
         self.assertIn("errors=0", report.summary())
 

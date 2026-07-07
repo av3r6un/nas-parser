@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -60,7 +61,7 @@ class ExcelExporter:
         return (
             record.sku or None,
             record.name or None,
-            record.price if record.price is not None else None,
+            self._export_price(record.price),
             record.quantity if record.quantity is not None else None,
             record.category or None,
             record.color_code or record.color or None,
@@ -86,3 +87,11 @@ class ExcelExporter:
     def _export_cut(cut: str | None) -> str | None:
         """Return the export value for the cut column."""
         return cut or None
+
+    @staticmethod
+    def _export_price(price: Decimal | None) -> int | None:
+        """Return the export value for price as whole rubles rounded upward."""
+        if price is None:
+            return None
+
+        return int(price.to_integral_value(rounding=ROUND_CEILING))

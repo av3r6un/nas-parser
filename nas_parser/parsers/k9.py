@@ -30,7 +30,7 @@ class K9Parser(ParserBase):
 
     def supports(self, source_file: Path) -> bool:
         """Return whether the parser supports a K9 source file."""
-        return "k9" in source_file.name.casefold()
+        return source_file.stem.casefold().startswith("k9")
 
     def parse(self, source_rows: Iterable[SourceRow]) -> Iterable[ProductRecord]:
         """Yield ProductRecord objects from the provided source rows."""
@@ -63,7 +63,7 @@ class K9Parser(ParserBase):
                     row.values,
                 ),
                 color=current_color,
-                size=size_value,
+                size=self._normalize_size(size_value),
                 shape=current_shape,
                 fixation="sew",
                 cut=None,
@@ -93,6 +93,14 @@ class K9Parser(ParserBase):
             or re.fullmatch(r"\d+(?:[.,]\d+)?\s*MM", text, re.IGNORECASE)
             is not None
         )
+
+    @staticmethod
+    def _normalize_size(value: object | None) -> str | None:
+        """Normalize sew size formatting for ProductRecord storage."""
+        if not isinstance(value, str):
+            return None
+
+        return value.strip().replace("*", "x")
 
     @staticmethod
     def _decimal_value(

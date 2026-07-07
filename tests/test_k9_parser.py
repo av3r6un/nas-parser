@@ -34,7 +34,7 @@ class TestK9Parser(unittest.TestCase):
         parser = K9Parser()
 
         self.assertTrue(parser.supports(Path("input/K9.xlsx")))
-        self.assertTrue(parser.supports(Path("input/my_k9_prices.xlsx")))
+        self.assertTrue(parser.supports(Path("input/K9_premium.xlsx")))
 
     def test_supports_rejects_non_k9_files(self) -> None:
         """Verify that the parser rejects unrelated file types."""
@@ -124,7 +124,7 @@ class TestK9Parser(unittest.TestCase):
             quantity=1886,
             color="CRYSTAL",
             shape="Drop",
-            size="7*12",
+            size="7x12",
             source_file=source_file,
             source_sheet="sheet1",
             source_row=3,
@@ -135,7 +135,7 @@ class TestK9Parser(unittest.TestCase):
             quantity=1170,
             color="CRYSTAL",
             shape="Drop",
-            size="10*14",
+            size="10x14",
             source_file=source_file,
             source_sheet="sheet1",
             source_row=4,
@@ -146,7 +146,7 @@ class TestK9Parser(unittest.TestCase):
             quantity=439,
             color="CRYSTAL",
             shape="Navette",
-            size="7*15",
+            size="7x15",
             source_file=source_file,
             source_sheet="sheet1",
             source_row=5,
@@ -157,7 +157,7 @@ class TestK9Parser(unittest.TestCase):
             quantity=651,
             color="AQUAMARINE",
             shape="Navette",
-            size="8*8",
+            size="8x8",
             source_file=source_file,
             source_sheet="sheet1",
             source_row=6,
@@ -168,7 +168,7 @@ class TestK9Parser(unittest.TestCase):
             quantity=954,
             color="AQUAMARINE",
             shape="Navette",
-            size="9*18",
+            size="9x18",
             source_file=source_file,
             source_sheet="sheet1",
             source_row=7,
@@ -179,7 +179,7 @@ class TestK9Parser(unittest.TestCase):
             quantity=20,
             color="TOPAZ",
             shape="Rivoli",
-            size="12*12",
+            size="12x12",
             source_file=source_file,
             source_sheet="sheet2",
             source_row=3,
@@ -249,6 +249,46 @@ class TestK9Parser(unittest.TestCase):
             source_file=source_file,
             source_sheet="sheet1",
             source_row=637,
+        )
+
+    def test_parse_keeps_mm_size_unchanged(self) -> None:
+        """Verify that MM sizes are stored without additional changes."""
+        parser = K9Parser()
+        source_file = Path("input/K9_premium.xlsx")
+        rows = [
+            make_source_row(
+                source_file,
+                "sheet1",
+                1,
+                ("title", None, None, None, None, None, None, None),
+            ),
+            make_source_row(
+                source_file,
+                "sheet1",
+                2,
+                ("color", "shape", "size", "price", "pack", "received", "sold", "stock"),
+            ),
+            make_source_row(
+                source_file,
+                "sheet1",
+                3,
+                ("CRYSTAL", "Drop", "10MM", 11, 72, 1886, None, 1886),
+            ),
+        ]
+
+        records = list(parser.parse(rows))
+
+        self.assertEqual(len(records), 1)
+        self._assert_record(
+            records[0],
+            price=11,
+            quantity=1886,
+            color="CRYSTAL",
+            shape="Drop",
+            size="10MM",
+            source_file=source_file,
+            source_sheet="sheet1",
+            source_row=3,
         )
 
     def _assert_record(
